@@ -1,0 +1,334 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Wavetable Synth Player</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body { background-color: #111827; color: #f3f4f6; }
+        .piano-container {
+            display: flex;
+            position: relative;
+            height: 200px;
+            width: 100%;
+            max-width: 800px;
+            margin: 0 auto;
+            border: 2px solid #374151;
+            border-radius: 8px;
+            overflow: hidden;
+            background: #1f2937;
+        }
+        .key {
+            border: 1px solid #000;
+            border-radius: 0 0 4px 4px;
+            cursor: pointer;
+            display: flex;
+            align-items: flex-end;
+            justify-content: center;
+            padding-bottom: 10px;
+            font-weight: bold;
+            user-select: none;
+            transition: background-color 0.1s;
+        }
+        .key-white {
+            flex: 1;
+            background-color: white;
+            color: #374151;
+            z-index: 1;
+        }
+        .key-white.active { background-color: #e5e7eb; transform: translateY(1px); }
+        .key-black {
+            position: absolute;
+            width: 4%;
+            height: 60%;
+            background-color: #1f2937;
+            color: white;
+            z-index: 2;
+            transform: translateX(-50%);
+            border-radius: 0 0 4px 4px;
+        }
+        .key-black.active { background-color: #374151; }
+        
+        /* Positioning black keys (approximate % for 14 white keys) */
+        .bk-1 { left: 7.14%; }
+        .bk-2 { left: 14.28%; }
+        .bk-3 { left: 28.57%; }
+        .bk-4 { left: 35.71%; }
+        .bk-5 { left: 42.85%; }
+        .bk-6 { left: 57.14%; }
+        .bk-7 { left: 64.28%; }
+        .bk-8 { left: 78.57%; }
+        .bk-9 { left: 85.71%; }
+        .bk-10 { left: 92.85%; }
+    </style>
+</head>
+<body class="min-h-screen flex flex-col items-center p-6">
+
+    <div class="max-w-4xl w-full flex flex-col gap-6">
+        <!-- Header -->
+        <div class="text-center">
+            <h1 class="text-4xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-blue-400 to-emerald-400 mb-2">
+                ClassPad Wavetable Synth
+            </h1>
+            <p class="text-gray-400">Upload <code class="bg-gray-800 px-1 rounded">wt_osc.wav</code> or scan your QR code!</p>
+        </div>
+
+        <!-- Controls Panel -->
+        <div class="bg-gray-800 p-6 rounded-xl shadow-lg flex flex-col md:flex-row gap-6 items-center justify-between border border-gray-700">
+            <div class="flex flex-col gap-2 w-full md:w-1/3">
+                <label class="font-semibold text-gray-300">1. Load Wavetable Patch</label>
+                <input type="file" id="audio-upload" accept=".wav" 
+                    class="block w-full text-sm text-gray-400
+                    file:mr-4 file:py-2 file:px-4
+                    file:rounded-full file:border-0
+                    file:text-sm file:font-semibold
+                    file:bg-blue-600 file:text-white
+                    hover:file:bg-blue-500 cursor-pointer"/>
+                
+                <!-- Dynamic QR Loader Button -->
+                <div id="url-loader" class="hidden mt-2">
+                    <button id="btn-load-url" class="w-full bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-semibold py-2 px-4 rounded-full transition-colors shadow-md">
+                        Load Patch from QR Code
+                    </button>
+                </div>
+
+                <div id="status" class="text-sm text-red-400 mt-1">No file loaded.</div>
+            </div>
+
+            <div class="flex flex-col gap-4 w-full md:w-2/3">
+                <div class="flex gap-4 items-center">
+                    <label class="w-20 text-sm text-gray-300">Attack</label>
+                    <input type="range" id="attack-slider" min="0.01" max="2" step="0.01" value="0.1" class="w-full h-2 bg-gray-600 rounded-lg appearance-none cursor-pointer">
+                    <span id="attack-val" class="w-12 text-sm text-right">0.1s</span>
+                </div>
+                <div class="flex gap-4 items-center">
+                    <label class="w-20 text-sm text-gray-300">Release</label>
+                    <input type="range" id="release-slider" min="0.01" max="3" step="0.01" value="0.5" class="w-full h-2 bg-gray-600 rounded-lg appearance-none cursor-pointer">
+                    <span id="release-val" class="w-12 text-sm text-right">0.5s</span>
+                </div>
+                <div class="flex gap-4 items-center">
+                    <label class="w-20 text-sm text-gray-300">Volume</label>
+                    <input type="range" id="volume-slider" min="0" max="1" step="0.01" value="0.5" class="w-full h-2 bg-gray-600 rounded-lg appearance-none cursor-pointer">
+                    <span id="volume-val" class="w-12 text-sm text-right">50%</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Piano Hint -->
+        <p class="text-center text-gray-400 text-sm">
+            Use your mouse or computer keyboard (A-K / W-U row) to play.
+        </p>
+
+        <!-- Piano Container -->
+        <div class="piano-container" id="piano">
+            <!-- White Keys -->
+            <div class="key key-white" data-note="261.63" data-key="A">A<br>(C4)</div>
+            <div class="key key-white" data-note="293.66" data-key="S">S<br>(D4)</div>
+            <div class="key key-white" data-note="329.63" data-key="D">D<br>(E4)</div>
+            <div class="key key-white" data-note="349.23" data-key="F">F<br>(F4)</div>
+            <div class="key key-white" data-note="392.00" data-key="G">G<br>(G4)</div>
+            <div class="key key-white" data-note="440.00" data-key="H">H<br>(A4)</div>
+            <div class="key key-white" data-note="493.88" data-key="J">J<br>(B4)</div>
+            <div class="key key-white" data-note="523.25" data-key="K">K<br>(C5)</div>
+            <div class="key key-white" data-note="587.33" data-key="L">L<br>(D5)</div>
+            <div class="key key-white" data-note="659.25" data-key=";">;<br>(E5)</div>
+            
+            <!-- Black Keys -->
+            <div class="key key-black bk-1" data-note="277.18" data-key="W">W</div>
+            <div class="key key-black bk-2" data-note="311.13" data-key="E">E</div>
+            <div class="key key-black bk-3" data-note="369.99" data-key="T">T</div>
+            <div class="key key-black bk-4" data-note="415.30" data-key="Y">Y</div>
+            <div class="key key-black bk-5" data-note="466.16" data-key="U">U</div>
+            <div class="key key-black bk-6" data-note="554.37" data-key="O">O</div>
+            <div class="key key-black bk-7" data-note="622.25" data-key="P">P</div>
+        </div>
+    </div>
+
+    <script>
+        // Web Audio API Context
+        let audioCtx;
+        let masterGain;
+        let wavetableBuffer = null;
+        const activeNotes = new Map();
+
+        // UI Elements
+        const statusEl = document.getElementById('status');
+        const attackSlider = document.getElementById('attack-slider');
+        const releaseSlider = document.getElementById('release-slider');
+        const volumeSlider = document.getElementById('volume-slider');
+
+        // Update Slider Labels
+        attackSlider.addEventListener('input', e => document.getElementById('attack-val').innerText = e.target.value + 's');
+        releaseSlider.addEventListener('input', e => document.getElementById('release-val').innerText = e.target.value + 's');
+        volumeSlider.addEventListener('input', e => {
+            document.getElementById('volume-val').innerText = Math.round(e.target.value * 100) + '%';
+            if(masterGain) masterGain.gain.setTargetAtTime(e.target.value, audioCtx.currentTime, 0.05);
+        });
+
+        // Initialize Audio Context (must be triggered by user action)
+        function initAudio() {
+            if (!audioCtx) {
+                audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+                masterGain = audioCtx.createGain();
+                masterGain.gain.value = volumeSlider.value;
+                masterGain.connect(audioCtx.destination);
+            }
+        }
+
+        // Generate Math Buffer directly from QR Payload!
+        function generateWavetableFromPatch(patchStr) {
+            try {
+                const oscs = patchStr.split('|').map(o => {
+                    const [w, v, c, f] = o.split(',').map(Number);
+                    return { wave: w, vol: v, coarse: c, fine: f };
+                });
+                
+                const buffer = audioCtx.createBuffer(1, 256, audioCtx.sampleRate);
+                const data = buffer.getChannelData(0);
+                
+                for(let i=0; i<256; i++) {
+                    let val = 0;
+                    for(let osc of oscs) {
+                        if (osc.vol <= 0.001) continue;
+                        const freq = Math.pow(2.0, osc.coarse / 12.0 + osc.fine / 1200.0);
+                        const phase = ((i * freq) / 256.0) % 1.0;
+                        let v = 0;
+                        if(osc.wave === 0) v = Math.sin(phase * 2 * Math.PI);
+                        else if(osc.wave === 1) v = phase < 0.5 ? 1.0 : -1.0;
+                        else if(osc.wave === 2) v = 1.0 - 2.0 * phase;
+                        else if(osc.wave === 3) v = phase < 0.5 ? 4.0 * phase - 1.0 : 3.0 - 4.0 * phase;
+                        val += v * osc.vol;
+                    }
+                    data[i] = val;
+                }
+                
+                let maxAmp = 0;
+                for(let i=0; i<256; i++) maxAmp = Math.max(maxAmp, Math.abs(data[i]));
+                if(maxAmp > 1.0) {
+                    for(let i=0; i<256; i++) data[i] /= maxAmp;
+                }
+                
+                wavetableBuffer = buffer;
+                statusEl.innerText = "Wavetable mathematically generated from QR code patch!";
+                statusEl.className = "text-sm text-green-400 mt-1";
+            } catch (err) {
+                console.error(err);
+                statusEl.innerText = "Invalid patch data in URL.";
+                statusEl.className = "text-sm text-red-400 mt-1";
+            }
+        }
+
+        // Handle QR Code URL parameter loading
+        const urlParams = new URLSearchParams(window.location.search);
+        if (urlParams.has('p')) {
+            document.getElementById('url-loader').classList.remove('hidden');
+            document.getElementById('audio-upload').classList.add('hidden'); // Hide upload to focus on QR load
+            document.getElementById('btn-load-url').addEventListener('click', () => {
+                initAudio();
+                generateWavetableFromPatch(urlParams.get('p'));
+            });
+            statusEl.innerText = "Patch detected in URL! Click button above to load.";
+            statusEl.className = "text-sm text-blue-400 mt-1";
+        }
+
+        // Handle File Upload (Fallback)
+        document.getElementById('audio-upload').addEventListener('change', function(e) {
+            initAudio();
+            const file = e.target.files[0];
+            if (!file) return;
+
+            const reader = new FileReader();
+            reader.onload = async function(event) {
+                const arrayBuffer = event.target.result;
+                try {
+                    wavetableBuffer = await audioCtx.decodeAudioData(arrayBuffer);
+                    statusEl.innerText = "Wavetable loaded successfully! Ready to play.";
+                    statusEl.className = "text-sm text-green-400 mt-1";
+                } catch (err) {
+                    statusEl.innerText = "Error decoding audio. Make sure it's a valid WAV.";
+                    statusEl.className = "text-sm text-red-400 mt-1";
+                    console.error(err);
+                }
+            };
+            reader.readAsArrayBuffer(file);
+        });
+
+        // Play Note Logic
+        function playNote(frequency, keyElement) {
+            if (!wavetableBuffer) {
+                alert("Please load a patch via QR or upload a file first!");
+                return;
+            }
+            initAudio();
+            if (activeNotes.has(frequency)) return;
+
+            const baseFreq = audioCtx.sampleRate / wavetableBuffer.length;
+            const playbackRate = frequency / baseFreq;
+
+            const source = audioCtx.createBufferSource();
+            source.buffer = wavetableBuffer;
+            source.loop = true;
+            source.playbackRate.value = playbackRate;
+
+            const envGain = audioCtx.createGain();
+            envGain.gain.value = 0; 
+            const attackTime = parseFloat(attackSlider.value);
+            envGain.gain.setTargetAtTime(1.0, audioCtx.currentTime, attackTime / 3);
+
+            source.connect(envGain);
+            envGain.connect(masterGain);
+            source.start();
+
+            activeNotes.set(frequency, { source, envGain });
+            if (keyElement) keyElement.classList.add('active');
+        }
+
+        // Stop Note Logic
+        function stopNote(frequency, keyElement) {
+            if (!activeNotes.has(frequency)) return;
+
+            const { source, envGain } = activeNotes.get(frequency);
+            const releaseTime = parseFloat(releaseSlider.value);
+
+            envGain.gain.cancelScheduledValues(audioCtx.currentTime);
+            envGain.gain.setTargetAtTime(0, audioCtx.currentTime, releaseTime / 3);
+            source.stop(audioCtx.currentTime + releaseTime * 2);
+
+            activeNotes.delete(frequency);
+            if (keyElement) keyElement.classList.remove('active');
+        }
+
+        // --- Event Listeners for UI Piano ---
+        document.querySelectorAll('.key').forEach(key => {
+            const freq = parseFloat(key.getAttribute('data-note'));
+            
+            key.addEventListener('mousedown', () => playNote(freq, key));
+            key.addEventListener('mouseup', () => stopNote(freq, key));
+            key.addEventListener('mouseleave', () => stopNote(freq, key));
+            
+            key.addEventListener('touchstart', (e) => { e.preventDefault(); playNote(freq, key); });
+            key.addEventListener('touchend', (e) => { e.preventDefault(); stopNote(freq, key); });
+        });
+
+        // --- Event Listeners for Computer Keyboard ---
+        const keyMap = {};
+        document.querySelectorAll('.key').forEach(key => {
+            const char = key.getAttribute('data-key').toLowerCase();
+            const freq = parseFloat(key.getAttribute('data-note'));
+            keyMap[char] = { freq, element: key };
+        });
+
+        window.addEventListener('keydown', e => {
+            if (e.repeat) return; 
+            const mapped = keyMap[e.key.toLowerCase()];
+            if (mapped) playNote(mapped.freq, mapped.element);
+        });
+
+        window.addEventListener('keyup', e => {
+            const mapped = keyMap[e.key.toLowerCase()];
+            if (mapped) stopNote(mapped.freq, mapped.element);
+        });
+    </script>
+</body>
+</html>
